@@ -67,10 +67,6 @@ decr0:
   move  r1, 1000           // else r1 = 1000
   jump  decr1              // and continue countdown
 
-
-
-
-
 start_measure:             // begin analog sensors measurement
 
   WRITE_RTC_REG(RTC_GPIO_ENABLE_W1TS_REG, RTC_GPIO_ENABLE_W1TS_S + 8, 1, 1) // set rtc_gpio_8 HIGH to lock the sensors key
@@ -210,7 +206,6 @@ finish_div4:
   st r1, r0, 0             // save flag to mem
 
   jump wake_up
-
 
 wake_up:
   /* Check if the SoC can be woken up */

@@ -34,7 +34,15 @@ adc_2_6q:
 	
     .global analog_measurements_taken
 analog_measurements_taken:
-    .long 0
+    .long 1
+	
+    .global hibernation_flag
+hibernation_flag:
+    .long 1
+	
+    .global reset_flag
+reset_flag:
+    .long 1
 
     // ADC1 channel 4, GPIO 32
     .set adc_channel_1_4, 4
@@ -51,6 +59,12 @@ analog_measurements_taken:
 
 entry:
 
+  move r1, hibernation_flag         // put address to r1
+  ld r0, r1, 0                      // load hibernation_flag value to r0
+  jumpr prog_start, 14, ge          // if r0 >= 14 begin program  (these 2 line actually represent "if r0 == 13 else")
+  jumpr hibernation_loop, 13, ge    // if r0 >= 13 begin loop
+
+prog_start:
   WRITE_RTC_REG(RTC_GPIO_OUT_REG, RTC_GPIO_OUT_DATA_S + 8, 1, 1) // rtc_gpio_8 is output
   WRITE_RTC_REG(RTC_GPIO_ENABLE_W1TC_REG, RTC_GPIO_ENABLE_W1TC_S + 8, 1, 1) // set rtc_gpio_8 LOW
 
@@ -69,12 +83,13 @@ decr0:
 
 start_measure:             // begin analog sensors measurement
 
-  WRITE_RTC_REG(RTC_GPIO_ENABLE_W1TS_REG, RTC_GPIO_ENABLE_W1TS_S + 8, 1, 1) // set rtc_gpio_8 HIGH to lock the sensors key
+  // set rtc_gpio_8 HIGH to lock the sensors key
+  WRITE_RTC_REG(RTC_GPIO_ENABLE_W1TS_REG, RTC_GPIO_ENABLE_W1TS_S + 8, 1, 1)
   move  r0, 900            // wait in ms
 turn_sensors:              // wait for sensors to power on
   wait  8000               // wait 8000 clock ticks at 8MHz -> 1ms
   sub   r0, r0, 1          // decrement ms count
-  jump  sensors_on, eq   // if ms count is zero then quit
+  jump  sensors_on, eq     // if ms count is zero then quit
   jump  turn_sensors       // else continue to wait
 
 sensors_on:
@@ -200,7 +215,8 @@ finish_div4:
   move r0, adc_2_6q        // put address to r0
   st r2, r0, 0             // store final quotient to mem
   
-  WRITE_RTC_REG(RTC_GPIO_ENABLE_W1TC_REG, RTC_GPIO_ENABLE_W1TC_S + 8, 1, 1) // set rtc_gpio_8 LOW to unlock the sensors key
+  // set rtc_gpio_8 LOW to unlock the sensors key
+  WRITE_RTC_REG(RTC_GPIO_ENABLE_W1TC_REG, RTC_GPIO_ENABLE_W1TC_S + 8, 1, 1)
   move r0, analog_measurements_taken        // put address to r0
   move r1, 2905            // set flag
   st r1, r0, 0             // save flag to mem
@@ -208,13 +224,15 @@ finish_div4:
   jump wake_up
 
 wake_up:
-  /* Check if the SoC can be woken up */
+  // check if the SoC can be woken up
   READ_RTC_FIELD(RTC_CNTL_LOW_POWER_ST_REG, RTC_CNTL_RDY_FOR_WAKEUP)
   and r0, r0, 1
-  jump wake_up, eq    /* Retry until the bit is set */
-
-  /* Wake up the SoC and stop ULP program */
+  jump wake_up, eq         // retry until the bit is set
+  // wake up the SoC and stop ULP program
   wake
-  /* Stop the wakeup timer so it does not restart ULP */
+  // stop the wakeup timer so it does not restart ULP
   WRITE_RTC_FIELD(RTC_CNTL_STATE0_REG, RTC_CNTL_ULP_CP_SLP_TIMER_EN, 0)
   halt
+
+hibernation_loop:           // do nothing in hibernation mode (device is off)
+   jump hibernation_loop    // infinite loop
